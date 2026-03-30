@@ -52,8 +52,16 @@
     }
     #drop:hover, #drop.over { border-color: var(--cyan); box-shadow: var(--gc); }
     #drop input { display: none; }
-    .drop-hint { color: var(--muted); font-size: 11px; line-height: 1.7; }
-    #flist { margin-top: 5px; }
+    #drop-label { display: block; cursor: pointer; padding: 8px 0 4px; }
+    #drop-label:hover .drop-hint { color: var(--text); }
+    .drop-hint { color: var(--muted); font-size: 11px; line-height: 1.7; transition: color .15s; }
+    #flist { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); display: none; }
+    #flist.has-files { display: block; }
+    .fchip-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+    .fchip { display: inline-block; background: rgba(0,245,212,.08); border: 1px solid var(--dim); border-radius: 2px; padding: 2px 6px; font-size: 10px; color: var(--cyan); max-width: 85%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .fcount { font-size: 10px; color: var(--green); }
+    .fclear { font-size: 10px; color: var(--muted); cursor: pointer; background: none; border: none; font-family: var(--mono); padding: 0; }
+    .fclear:hover { color: var(--err); }
     .fchip { display: inline-block; background: rgba(0,245,212,.08); border: 1px solid var(--dim); border-radius: 2px; padding: 2px 6px; margin: 2px; font-size: 10px; color: var(--cyan); }
 
     .opts { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--inp); }
@@ -183,8 +191,10 @@
         <div>
           <div class="phead">① 上傳邀請函</div>
           <div id="drop">
-            <input type="file" id="finput" multiple accept=".pdf,.doc,.docx,.txt,.eml,.msg">
-            <div class="drop-hint">拖放或點擊上傳<br><span style="font-size:10px">PDF · Word · TXT · EML</span></div>
+            <label for="finput" id="drop-label">
+              <input type="file" id="finput" multiple accept=".pdf,.doc,.docx,.txt,.eml,.msg">
+              <div class="drop-hint">🖱 拖放或 <u style="color:var(--cyan);cursor:pointer">點擊選檔</u><br><span style="font-size:10px">PDF · Word · TXT · EML &nbsp;｜&nbsp; 可多選</span></div>
+            </label>
             <div id="flist"></div>
           </div>
         </div>
@@ -888,15 +898,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const drop = document.getElementById('drop');
   const fi = document.getElementById('finput');
   const fl = document.getElementById('flist');
+
   const updFiles = files => {
     AppState.files = Array.from(files);
-    fl.innerHTML = AppState.files.map(f=>`<span class="fchip">${f.name}</span>`).join('');
+    if (!AppState.files.length) { fl.innerHTML = ''; fl.classList.remove('has-files'); return; }
+    const chips = AppState.files.map(f =>
+      `<div class="fchip-row"><span class="fchip" title="${f.name}">${f.name}</span><span style="color:var(--muted);font-size:10px">${(f.size/1024).toFixed(0)}KB</span></div>`
+    ).join('');
+    fl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span class="fcount">已選 ${AppState.files.length} 個檔案</span><button class="fclear" id="btn-clear-files">✕ 清除</button></div>` + chips;
+    fl.classList.add('has-files');
+    document.getElementById('btn-clear-files').addEventListener('click', () => {
+      AppState.files = []; fi.value = ''; fl.innerHTML = ''; fl.classList.remove('has-files');
+    });
   };
-  drop.addEventListener('click', () => fi.click());
+
+  // drag & drop — only on the drop zone itself
   drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); if(e.dataTransfer.files.length) updFiles(e.dataTransfer.files); });
-  fi.addEventListener('change', e => updFiles(e.target.files));
+  drop.addEventListener('dragleave', e => { if (!drop.contains(e.relatedTarget)) drop.classList.remove('over'); });
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('over');
+    if (e.dataTransfer.files.length) updFiles(e.dataTransfer.files);
+  });
+  fi.addEventListener('change', e => { if (e.target.files.length) updFiles(e.target.files); });
 
   // Options
   document.getElementById('chk-budget').addEventListener('change', e => { AppState.isBudgeted = e.target.checked; });

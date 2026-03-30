@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MKT Event Processor v1.0 — Molecular Devices TWHK</title>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8/build/index.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a0f; --bg2: #0f0f1a; --panel: #12121f; --inp: #0d0d1a;
+      --border: #1e1e3a; --active: #00f5d4;
+      --cyan: #00f5d4; --green: #00ff9f; --dim: #00b4a0;
+      --text: #e0e0ff; --muted: #8888aa;
+      --warn: #ffcc00; --err: #ff4455;
+      --mono: 'JetBrains Mono', 'Courier New', monospace;
+      --gc: 0 0 8px rgba(0,245,212,.45); --gg: 0 0 8px rgba(0,255,159,.45);
+      --r: 3px;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 12px; overflow: hidden; }
+    body::after {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.04) 2px, rgba(0,0,0,.04) 4px);
+    }
+    #app { display: flex; flex-direction: column; height: 100vh; padding: 6px; gap: 6px; }
+
+    /* HEADER */
+    #hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px; height: 44px; flex-shrink: 0;
+      border: 1px solid var(--border); background: var(--panel); border-radius: var(--r);
+    }
+    .hdr-l { display: flex; align-items: center; gap: 12px; }
+    .app-title { color: var(--cyan); font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+    .app-ver { color: var(--muted); font-size: 10px; }
+    .hdr-r { display: flex; gap: 6px; }
+
+    /* GRID */
+    #grid { flex: 1; display: grid; grid-template-columns: 1fr 2fr; gap: 6px; overflow: hidden; min-height: 0; }
+
+    /* PANEL */
+    .panel { border: 1px solid var(--border); background: var(--panel); border-radius: var(--r); overflow-y: auto; padding: 10px; }
+    .phead { color: var(--cyan); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+
+    /* WORKSPACE */
+    #ws { display: flex; flex-direction: column; gap: 8px; }
+    #drop {
+      border: 1px dashed var(--dim); border-radius: var(--r);
+      padding: 10px; text-align: center; cursor: pointer;
+      transition: all .15s; background: var(--inp);
+    }
+    #drop:hover, #drop.over { border-color: var(--cyan); box-shadow: var(--gc); }
+    #drop input { display: none; }
+    .drop-hint { color: var(--muted); font-size: 11px; line-height: 1.7; }
+    #flist { margin-top: 5px; }
+    .fchip { display: inline-block; background: rgba(0,245,212,.08); border: 1px solid var(--dim); border-radius: 2px; padding: 2px 6px; margin: 2px; font-size: 10px; color: var(--cyan); }
+
+    .opts { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--inp); }
+    .chk-row { display: flex; align-items: center; gap: 6px; }
+    .chk-row input { accent-color: var(--cyan); cursor: pointer; }
+    .chk-row label { cursor: pointer; }
+    select { background: var(--inp); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 11px; padding: 3px 6px; border-radius: var(--r); cursor: pointer; width: 100%; }
+    select:focus { outline: none; border-color: var(--cyan); }
+
+    #status { padding: 4px 8px; border-radius: var(--r); font-size: 11px; min-height: 24px; border: 1px solid transparent; display: none; }
+    #status.ok  { display: block; color: var(--green); border-color: var(--green); background: rgba(0,255,159,.05); }
+    #status.err { display: block; color: var(--err); border-color: var(--err); background: rgba(255,68,85,.05); }
+    #status.wrn { display: block; color: var(--warn); border-color: var(--warn); background: rgba(255,204,0,.05); }
+
+    textarea { width: 100%; background: var(--inp); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 11px; padding: 6px 8px; border-radius: var(--r); resize: vertical; min-height: 58px; }
+    textarea:focus, input[type=text]:focus, input[type=password]:focus { outline: none; border-color: var(--cyan); }
+    textarea::placeholder { color: var(--muted); }
+
+    .btn { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: var(--r); cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .btn::before { content: '> '; color: var(--green); }
+    .btn:hover { border-color: var(--cyan); color: var(--cyan); box-shadow: var(--gc); }
+    .btn:active { transform: translateY(1px); }
+    .btn-p { border-color: var(--cyan); color: var(--cyan); width: 100%; justify-content: center; font-weight: 700; }
+    .btn-p:hover { background: rgba(0,245,212,.08); }
+    .btn-sm { font-size: 10px; padding: 3px 8px; }
+    .btn-icon { font-size: 13px; padding: 4px 9px; }
+    .btn-icon::before { content: ''; }
+    .ogrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    .ogrid .btn { font-size: 10px; padding: 4px 5px; }
+
+    /* SUMMARY TABLE */
+    #stbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+    #stbl th { background: var(--bg2); color: var(--cyan); font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 5px 8px; text-align: left; border: 1px solid var(--border); }
+    #stbl td { border: 1px solid var(--border); padding: 5px 8px; vertical-align: top; }
+    #stbl td.lbl { color: var(--cyan); font-size: 10px; font-weight: 700; white-space: nowrap; width: 100px; background: rgba(0,245,212,.03); }
+    #stbl td.val { color: var(--text); }
+    #stbl td.empty::after { content: '—'; color: var(--muted); }
+    .clbl { color: var(--muted); font-size: 10px; margin-bottom: 2px; }
+    .chip { display: inline-block; background: rgba(0,255,159,.1); border: 1px solid var(--green); border-radius: 2px; padding: 1px 5px; margin: 1px; font-size: 10px; color: var(--green); }
+    .chip-c { background: rgba(0,245,212,.1); border-color: var(--cyan); color: var(--cyan); }
+    .sitem { display: flex; align-items: flex-start; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+    .sitem:last-child { border-bottom: none; }
+    .sitem input[type=checkbox] { accent-color: var(--cyan); margin-top: 2px; }
+    .stag { font-size: 9px; padding: 1px 4px; border-radius: 2px; background: rgba(0,245,212,.1); color: var(--cyan); white-space: nowrap; }
+    .stag-g { background: rgba(0,255,159,.1); color: var(--green); }
+    .vrow { padding: 2px 0; border-bottom: 1px solid var(--border); }
+    .vrow:last-child { border-bottom: none; }
+    .vname { font-weight: 700; }
+    .vmeta { color: var(--muted); font-size: 10px; }
+    .atips .fit { color: var(--text); line-height: 1.5; margin-bottom: 6px; }
+    .atips .albl { color: var(--green); font-size: 10px; font-weight: 700; margin-bottom: 3px; }
+
+    /* MODALS */
+    .ov { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 1000; align-items: center; justify-content: center; }
+    .ov.on { display: flex; }
+    .modal { background: var(--panel); border: 1px solid var(--active); border-radius: var(--r); box-shadow: 0 0 24px rgba(0,245,212,.18); padding: 20px; max-width: 520px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .mtitle { color: var(--cyan); font-size: 14px; font-weight: 700; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .mclose { float: right; background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; font-family: var(--mono); }
+    .mclose:hover { color: var(--cyan); }
+    .fgrp { margin-bottom: 12px; }
+    .flbl { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; display: block; }
+    input[type=text], input[type=password] { width: 100%; background: var(--inp); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 11px; padding: 5px 8px; border-radius: var(--r); }
+    .pwrap { display: flex; gap: 4px; }
+    .pwrap input { flex: 1; }
+    .disc { font-size: 10px; color: var(--warn); padding: 6px 8px; border: 1px solid var(--warn); border-radius: var(--r); margin-top: 8px; background: rgba(255,204,0,.04); line-height: 1.5; }
+    .mact { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+    /* HELP */
+    .wflow { font-size: 11px; line-height: 1.8; color: var(--green); background: var(--inp); padding: 10px; border-radius: var(--r); border: 1px solid var(--border); white-space: pre; overflow-x: auto; margin-bottom: 12px; }
+    .hsec { margin-bottom: 10px; }
+    .hstitle { color: var(--cyan); font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+    .hdesc { color: var(--muted); line-height: 1.5; }
+
+    /* LOADING */
+    #mload .modal { text-align: center; padding: 30px; min-width: 260px; }
+    .spin { color: var(--cyan); font-size: 22px; animation: blink .8s infinite; margin-bottom: 8px; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:.15} }
+    #lstat { color: var(--muted); font-size: 11px; margin-top: 6px; }
+
+    /* PRINT */
+    #print-area { display: none; }
+    @media print {
+      body::after { display: none; }
+      #app { display: none; }
+      #print-area {
+        display: block !important; font-family: Arial, sans-serif;
+        color: #000; background: #fff; padding: 15mm;
+      }
+      #print-area h1 { font-size: 22pt; font-weight: bold; margin-bottom: 10pt; }
+      #print-area h2 { font-size: 14pt; font-weight: bold; margin-bottom: 6pt; margin-top: 14pt; border-bottom: 1px solid #ccc; padding-bottom: 3pt; }
+      #print-area p { font-size: 11pt; margin-bottom: 6pt; line-height: 1.5; }
+      #print-area table { width: 100%; border-collapse: collapse; margin-bottom: 10pt; font-size: 10pt; }
+      #print-area th, #print-area td { border: 1px solid #bbb; padding: 4pt 7pt; text-align: left; }
+      #print-area th { background: #f0f0f0; font-weight: bold; }
+      #print-area .ctag { display: inline-block; border: 1px solid #666; border-radius: 2pt; padding: 1pt 4pt; margin: 1pt; font-size: 9pt; }
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="hdr">
+    <div class="hdr-l">
+      <span class="app-title">◈ MKT EVENT PROCESSOR</span>
+      <span class="app-ver">v1.0 &nbsp;|&nbsp; TWHK Marketing &nbsp;|&nbsp; Molecular Devices</span>
+    </div>
+    <div class="hdr-r">
+      <button class="btn btn-sm btn-icon" id="btn-help">? Help</button>
+      <button class="btn btn-sm btn-icon" id="btn-settings">⚙ Settings</button>
+    </div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <div id="grid">
+
+    <!-- LEFT: WORKSPACE -->
+    <div class="panel">
+      <div id="ws">
+
+        <!-- ① UPLOAD -->
+        <div>
+          <div class="phead">① 上傳邀請函</div>
+          <div id="drop">
+            <input type="file" id="finput" multiple accept=".pdf,.doc,.docx,.txt,.eml,.msg">
+            <div class="drop-hint">拖放或點擊上傳<br><span style="font-size:10px">PDF · Word · TXT · EML</span></div>
+            <div id="flist"></div>
+          </div>
+        </div>
+
+        <!-- ② OPTIONS -->
+        <div>
+          <div class="phead">② 補充資訊</div>
+          <div class="opts">
+            <div class="chk-row">
+              <input type="checkbox" id="chk-budget">
+              <label for="chk-budget">已提列年度預算</label>
+            </div>
+            <div>
+              <div class="clbl" style="margin-bottom:4px">活動來源</div>
+              <select id="sel-src">
+                <option value="">請選擇...</option>
+                <option>主辦方直接邀請</option>
+                <option>Sales 轉發</option>
+                <option>經銷商轉發</option>
+                <option>主管交代</option>
+                <option>其他</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ③ ANALYZE -->
+        <div>
+          <div class="phead">③ 分析</div>
+          <button class="btn btn-p" id="btn-analyze">分析文件</button>
+          <div id="status"></div>
+        </div>
+
+        <!-- ④ EXTRA PROMPT -->
+        <div>
+          <div class="phead">④ 額外提示（選填）</div>
+          <textarea id="txt-extra" placeholder="補充說明 AI 未能識別的資訊，或修正摘要內容..."></textarea>
+        </div>
+
+        <!-- ⑤ OUTPUT -->
+        <div>
+          <div class="phead">⑤ 輸出文件</div>
+          <button class="btn btn-p" id="btn-all" style="margin-bottom:6px">一鍵生成全部</button>
+          <div class="ogrid">
+            <button class="btn btn-sm" id="btn-contract">活動協議草稿</button>
+            <button class="btn btn-sm" id="btn-legal">法務審批表格</button>
+            <button class="btn btn-sm" id="btn-budget">預算申請信</button>
+            <button class="btn btn-sm" id="btn-reply">回覆/追蹤信</button>
+            <button class="btn btn-sm" id="btn-report" style="grid-column:1/-1">活動摘要報告 (列印PDF)</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: SUMMARY -->
+    <div class="panel">
+      <div class="phead">資料摘要區 — AI 分析結果</div>
+      <table id="stbl">
+        <thead><tr><th style="width:100px">欄位</th><th>內容</th></tr></thead>
+        <tbody>
+          <tr><td class="lbl">活動名稱</td><td class="val empty" data-f="eventName"></td></tr>
+          <tr><td class="lbl">時間</td><td class="val empty" data-f="dateRange"></td></tr>
+          <tr><td class="lbl">主辦單位</td><td class="val empty" data-f="organizer"></td></tr>
+          <tr><td class="lbl">地點</td><td class="val empty" data-f="venue"></td></tr>
+          <tr><td class="lbl">收款帳號</td><td class="val empty" data-f="bankAccount"></td></tr>
+          <tr><td class="lbl">費用收款人</td><td class="val empty" data-f="payee"></td></tr>
+          <tr><td class="lbl">付款截止日</td><td class="val empty" data-f="paymentDeadline"></td></tr>
+          <tr><td class="lbl">預計人數</td><td class="val empty" data-f="attendeeCount"></td></tr>
+          <tr><td class="lbl">重點主題</td><td class="val empty" data-f="keyTopics"></td></tr>
+          <tr><td class="lbl">可贊助選項</td><td class="val empty" data-f="sponsorOptions"></td></tr>
+          <tr><td class="lbl">聯絡人</td><td class="val empty" data-f="contactInfo"></td></tr>
+          <tr><td class="lbl">其他事項</td><td class="val empty" data-f="otherNotes"></td></tr>
+          <tr><td class="lbl">重要人物</td><td class="val empty" data-f="vipList"></td></tr>
+          <tr><td class="lbl">活動網址</td><td class="val empty" data-f="eventUrl"></td></tr>
+          <tr><td class="lbl">AI 貼心提示</td><td class="val empty" data-f="aiTips"></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- PRINT AREA -->
+<div id="print-area"></div>
+
+<!-- MODAL: HELP -->
+<div class="ov" id="mhelp">
+  <div class="modal">
+    <div class="mtitle">工具說明 — 工作流程 <button class="mclose" data-c="mhelp">✕</button></div>
+    <div class="wflow">  [上傳文件] → [設定選項] → [分析] → [確認摘要] → [輸出文件]
+     ↓              ↓           ↓            ↓               ↓
+  PDF/Word     預算/來源     Claude AI    可手動修正     5種格式下載</div>
+    <div class="hsec"><div class="hstitle">① 上傳邀請函</div><div class="hdesc">支援 PDF、Word (.docx)、TXT、EML。可多選上傳。若 AI 讀取有限，請將文字貼入④。</div></div>
+    <div class="hsec"><div class="hstitle">② 補充資訊</div><div class="hdesc">勾選年度預算狀態，選擇活動來源（用於預算申請信）。</div></div>
+    <div class="hsec"><div class="hstitle">③ 分析</div><div class="hdesc">AI 讀取文件後，將重要資訊填入右側摘要表格。需先在 Settings 設定 API Key。</div></div>
+    <div class="hsec"><div class="hstitle">④ 額外提示</div><div class="hdesc">摘要有遺漏或錯誤，輸入修正說明後重新按「分析文件」。</div></div>
+    <div class="hsec"><div class="hstitle">⑤ 輸出文件</div><div class="hdesc">活動協議草稿 → .docx &nbsp;｜&nbsp; 法務審批表格 → .docx<br>預算申請信草稿 → .md &nbsp;｜&nbsp; 回覆/追蹤信 → .md<br>活動摘要報告 → 開啟列印對話框 → 選「儲存為 PDF」</div></div>
+    <div class="hsec"><div class="hstitle">⚙ Settings</div><div class="hdesc">API Key、Base URL（預設 Anthropic，可改其他相容 API）、Model 選擇。設定儲存於瀏覽器 localStorage。</div></div>
+    <div class="mact"><button class="btn" data-c="mhelp">關閉</button></div>
+  </div>
+</div>
+
+<!-- MODAL: SETTINGS -->
+<div class="ov" id="mset">
+  <div class="modal">
+    <div class="mtitle">⚙ Settings — API 設定 <button class="mclose" data-c="mset">✕</button></div>
+    <div class="fgrp">
+      <label class="flbl" for="inp-key">API KEY</label>
+      <div class="pwrap">
+        <input type="password" id="inp-key" placeholder="sk-ant-...">
+        <button class="btn btn-sm" id="btn-showkey">show</button>
+      </div>
+    </div>
+    <div class="fgrp">
+      <label class="flbl" for="inp-url">BASE URL</label>
+      <input type="text" id="inp-url" placeholder="https://api.anthropic.com">
+    </div>
+    <div class="fgrp">
+      <label class="flbl" for="sel-model">MODEL</label>
+      <select id="sel-model" style="width:100%">
+        <option value="claude-opus-4-5">claude-opus-4-5 (最強，適合複雜邀請函)</option>
+        <option value="claude-sonnet-4-5">claude-sonnet-4-5 (均衡)</option>
+        <option value="claude-haiku-3-5">claude-haiku-3-5 (最快)</option>
+      </select>
+    </div>
+    <div class="disc">⚠ API Key 儲存於瀏覽器 localStorage，僅限本機使用。<br>請勿在公用電腦儲存，亦勿將此 HTML 連同 Key 外傳。</div>
+    <div class="mact">
+      <button class="btn" data-c="mset">取消</button>
+      <button class="btn btn-p" id="btn-saveset" style="width:auto">儲存設定</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: LOADING -->
+<div class="ov" id="mload">
+  <div class="modal">
+    <div class="spin">▋</div>
+    <div style="color:var(--cyan);font-weight:700;font-size:13px">處理中...</div>
+    <div id="lstat">正在分析文件</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// MKT Event Processor v1.0 | Molecular Devices TWHK
+// ============================================================
+
+const AppState = {
+  files: [], extractedText: '', extraPrompt: '',
+  isBudgeted: false, eventSource: '',
+  data: {}, settings: {}
+};
+
+// ---- SettingsManager ----
+const SM = {
+  K: 'mkt_ep_v1',
+  D: { apiKey: '', baseUrl: 'https://api.anthropic.com', model: 'claude-opus-4-5' },
+  load() { try { return Object.assign({}, this.D, JSON.parse(localStorage.getItem(this.K)||'{}')); } catch { return {...this.D}; } },
+  save(s) { localStorage.setItem(this.K, JSON.stringify(s)); },
+  hdrs(s) {
+    return {
+      'x-api-key': s.apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
+  }
+};
+
+// ---- FileHandler ----
+const FH = {
+  async readAll(files) {
+    const parts = await Promise.all(Array.from(files).map(f => this.read(f)));
+    return parts.filter(Boolean).join('\n\n---\n\n');
+  },
+  read(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (['txt','eml','msg'].includes(ext)) return this.asText(file);
+    if (['docx','doc'].includes(ext)) return this.asDocx(file);
+    return this.asBuf(file).then(b => this.scan(new Uint8Array(b)));
+  },
+  asText(f) {
+    return new Promise(r => {
+      const rd = new FileReader();
+      rd.onload = e => r(e.target.result);
+      rd.onerror = () => r('');
+      rd.readAsText(f, 'UTF-8');
+    });
+  },
+  asBuf(f) {
+    return new Promise(r => {
+      const rd = new FileReader();
+      rd.onload = e => r(e.target.result);
+      rd.onerror = () => r(new ArrayBuffer(0));
+      rd.readAsArrayBuffer(f);
+    });
+  },
+  async asDocx(f) {
+    const buf = await this.asBuf(f);
+    try {
+      const dec = new TextDecoder('utf-8', { fatal: false });
+      const txt = dec.decode(buf);
+      const wt = txt.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || [];
+      const out = wt.map(m => m.replace(/<[^>]+>/g, '')).join(' ').trim();
+      return out.length > 80 ? out : this.scan(new Uint8Array(buf));
+    } catch { return ''; }
+  },
+  scan(u) {
+    let t = '';
+    for (let i = 0; i < u.length; i++) {
+      const b = u[i];
+      t += (b >= 32 && b < 127) ? String.fromCharCode(b) : ' ';
+    }
+    return (t.match(/[\x21-\x7E]{4,}/g) || []).join(' ').slice(0, 9000);
+  }
+};
+
+// ---- APIClient ----
+const SYS = `You are an expert at extracting structured information from event invitation letters for life science industry conferences in Taiwan, Hong Kong, and Macau.
+
+Extract all available information and return ONLY valid JSON (no markdown fences, no explanation text, just the raw JSON object). Use this exact schema:
+
+{
+  "eventName": "string",
+  "dateRange": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "totalDays": 0, "dayOfWeek": "string" },
+  "mainOrganizer": "string",
+  "coOrganizer": "string",
+  "commissionedOrganizer": "string",
+  "venue": { "full": "string", "building": "string", "room": "string" },
+  "bankAccount": { "zh": "original Chinese bank account info", "en": "English translation" },
+  "payee": "string",
+  "paymentDeadline": "YYYY-MM-DD or original text",
+  "attendeeCount": "string",
+  "keyTopics": { "summary": "string", "keywords": ["string"] },
+  "sponsorOptions": [{ "type": "廣告型|演講型|設攤型|其他型", "checked": false, "description": "string", "amount": "string" }],
+  "contactInfo": [{ "name": "string", "phone": "string", "email": "string" }],
+  "otherNotes": "string",
+  "vipList": [{ "name": "string", "role": "string", "affiliation": "string" }],
+  "eventUrl": "string",
+  "aiTips": {
+    "fitAnalysis": "1-2 sentences on whether this event fits Molecular Devices business (Bio-Research, Drug Discovery, Cell Workflow Automation)",
+    "recommendedProducts": ["e.g. SpectraMax, FLIPR, ImageXpress, ClonePix, QPix"],
+    "recommendedApplications": ["application areas matching event topics"]
+  }
+}
+If a field is not found, use empty string, empty array, or 0. Never omit a key.`;
+
+const API = {
+  async analyze(text, extra, s) {
+    if (!s.apiKey) throw new Error('請先在 Settings 設定 API Key');
+    const msg = `請分析以下活動邀請函，提取所有資訊：\n\n${text}${extra ? '\n\n補充說明：\n' + extra : ''}`;
+    const res = await fetch(`${s.baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: SM.hdrs(s),
+      body: JSON.stringify({ model: s.model, max_tokens: 2048, system: SYS, messages: [{ role: 'user', content: msg }] })
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(`API ${res.status}: ${e.error?.message || res.statusText}`);
+    }
+    const r = await res.json();
+    const raw = (r.content?.[0]?.text || '').replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'').trim();
+    return JSON.parse(raw);
+  }
+};
+
+// ---- DataParser ----
+const DP = {
+  parse(d) {
+    d = d || {};
+    return {
+      eventName: d.eventName || '',
+      dateRange: { start: d.dateRange?.start||'', end: d.dateRange?.end||'', totalDays: d.dateRange?.totalDays||0, dayOfWeek: d.dateRange?.dayOfWeek||'' },
+      mainOrganizer: d.mainOrganizer || '',
+      coOrganizer: d.coOrganizer || '',
+      commissionedOrganizer: d.commissionedOrganizer || '',
+      venue: { full: d.venue?.full||'', building: d.venue?.building||'', room: d.venue?.room||'' },
+      bankAccount: { zh: d.bankAccount?.zh||'', en: d.bankAccount?.en||'' },
+      payee: d.payee || '',
+      paymentDeadline: d.paymentDeadline || '',
+      attendeeCount: String(d.attendeeCount || ''),
+      keyTopics: { summary: d.keyTopics?.summary||'', keywords: Array.isArray(d.keyTopics?.keywords) ? d.keyTopics.keywords : [] },
+      sponsorOptions: Array.isArray(d.sponsorOptions) ? d.sponsorOptions.map(o => ({ type: o.type||'其他型', checked: false, description: o.description||'', amount: o.amount||'' })) : [],
+      contactInfo: Array.isArray(d.contactInfo) ? d.contactInfo : [],
+      otherNotes: d.otherNotes || '',
+      vipList: Array.isArray(d.vipList) ? d.vipList : [],
+      eventUrl: d.eventUrl || '',
+      aiTips: { fitAnalysis: d.aiTips?.fitAnalysis||'', recommendedProducts: Array.isArray(d.aiTips?.recommendedProducts)?d.aiTips.recommendedProducts:[], recommendedApplications: Array.isArray(d.aiTips?.recommendedApplications)?d.aiTips.recommendedApplications:[] }
+    };
+  }
+};
+
+// ---- UIRenderer ----
+const UI = {
+  esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); },
+  set(f, html) {
+    const c = document.querySelector(`[data-f="${f}"]`);
+    if (!c) return;
+    c.innerHTML = html || '';
+    html ? c.classList.remove('empty') : c.classList.add('empty');
+  },
+  render(d) {
+    this.set('eventName', this.esc(d.eventName));
+
+    if (d.dateRange.start) {
+      const dr = d.dateRange;
+      this.set('dateRange', `${this.esc(dr.start)} ～ ${this.esc(dr.end)}&nbsp;&nbsp;共 <b>${dr.totalDays}</b> 日，${this.esc(dr.dayOfWeek)}`);
+    } else this.set('dateRange', '');
+
+    let org = '';
+    if (d.mainOrganizer) org += `<div><span class="clbl">主辦</span> ${this.esc(d.mainOrganizer)}</div>`;
+    if (d.coOrganizer) org += `<div><span class="clbl">協辦</span> ${this.esc(d.coOrganizer)}</div>`;
+    if (d.commissionedOrganizer) org += `<div><span class="clbl">委辦</span> ${this.esc(d.commissionedOrganizer)}</div>`;
+    this.set('organizer', org);
+
+    this.set('venue', this.esc(d.venue.full));
+
+    if (d.bankAccount.zh) {
+      this.set('bankAccount', `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><div class="clbl">中文</div>${this.esc(d.bankAccount.zh)}</div><div><div class="clbl">English</div>${this.esc(d.bankAccount.en)}</div></div>`);
+    } else this.set('bankAccount', '');
+
+    this.set('payee', this.esc(d.payee));
+    this.set('paymentDeadline', this.esc(d.paymentDeadline));
+    this.set('attendeeCount', this.esc(d.attendeeCount));
+
+    if (d.keyTopics.summary) {
+      const kw = d.keyTopics.keywords.map(k => `<span class="chip">${this.esc(k)}</span>`).join('');
+      this.set('keyTopics', `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><div class="clbl">原文摘要</div>${this.esc(d.keyTopics.summary)}</div><div><div class="clbl">關鍵字</div>${kw||'—'}</div></div>`);
+    } else this.set('keyTopics', '');
+
+    if (d.sponsorOptions.length) {
+      const items = d.sponsorOptions.map((o, i) =>
+        `<div class="sitem"><input type="checkbox" id="sp_${i}" ${o.checked?'checked':''} onchange="AppState.data.sponsorOptions[${i}].checked=this.checked"><span class="stag">${this.esc(o.type)}</span><div style="flex:1"><div>${this.esc(o.description)}</div><div style="color:var(--cyan);font-weight:700;margin-top:2px">${this.esc(o.amount)}</div></div></div>`
+      ).join('');
+      const cust = `<div class="sitem"><span class="stag stag-g">客制化</span><input type="text" id="sp-custom" placeholder="自行輸入..." style="flex:1;font-size:10px;margin-left:4px"></div>`;
+      this.set('sponsorOptions', items + cust);
+    } else this.set('sponsorOptions', '');
+
+    if (d.contactInfo.length) {
+      this.set('contactInfo', d.contactInfo.map(c =>
+        `<div style="padding:2px 0;border-bottom:1px solid var(--border)"><b>${this.esc(c.name)}</b> &nbsp; ${this.esc(c.phone)} &nbsp; <a href="mailto:${this.esc(c.email)}" style="color:var(--cyan)">${this.esc(c.email)}</a></div>`
+      ).join(''));
+    } else this.set('contactInfo', '');
+
+    this.set('otherNotes', this.esc(d.otherNotes));
+
+    if (d.vipList.length) {
+      this.set('vipList', d.vipList.map(v =>
+        `<div class="vrow"><span class="vname">${this.esc(v.name)}</span> <span class="stag">${this.esc(v.role)}</span><div class="vmeta">${this.esc(v.affiliation)}</div></div>`
+      ).join(''));
+    } else this.set('vipList', '');
+
+    this.set('eventUrl', d.eventUrl ? `<a href="${this.esc(d.eventUrl)}" target="_blank" style="color:var(--cyan)">${this.esc(d.eventUrl)}</a>` : '');
+
+    if (d.aiTips.fitAnalysis) {
+      const prods = d.aiTips.recommendedProducts.map(p => `<span class="chip chip-c">${this.esc(p)}</span>`).join('');
+      const apps = d.aiTips.recommendedApplications.map(a => `<span class="chip">${this.esc(a)}</span>`).join('');
+      this.set('aiTips', `<div class="atips"><div class="fit">${this.esc(d.aiTips.fitAnalysis)}</div><div class="albl">建議展示產品</div><div style="margin-bottom:5px">${prods||'—'}</div><div class="albl">推薦應用方向</div><div>${apps||'—'}</div></div>`);
+    } else this.set('aiTips', '');
+  }
+};
+
+// ---- Helpers ----
+function safe(v) { return String(v||'').replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27FF}]/gu,'').trim() || '—'; }
+function today() { return new Date().toISOString().slice(0,10); }
+function fname(type, d) {
+  const dt = (d.dateRange?.start||today()).replace(/-/g,'');
+  const t = (d.eventName||'event').slice(0,18).replace(/[\s\\/]+/g,'_');
+  return `${type}_${t}_${dt}`;
+}
+function st(msg, cls='ok') { const el=document.getElementById('status'); el.textContent=msg; el.className=cls; }
+function loading(msg='處理中...') { document.getElementById('lstat').textContent=msg; document.getElementById('mload').classList.add('on'); }
+function loaded() { document.getElementById('mload').classList.remove('on'); }
+function dl(blob, name) {
+  const u=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=u; a.download=name; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+function dlTxt(txt, name) { dl(new Blob([txt],{type:'text/markdown;charset=utf-8'}), name); }
+function selSponsors(d) {
+  const cust = document.getElementById('sp-custom')?.value||'';
+  const sel = (d.sponsorOptions||[]).filter(o=>o.checked);
+  if (cust.trim()) sel.push({ type:'客制化', description:cust, amount:'' });
+  return sel;
+}
+
+// ---- Document Generators ----
+async function genContract(d) {
+  if (!window.docx) throw new Error('docx 套件未載入，請重新整理頁面');
+  const { Document, Paragraph, TextRun, Table, TableRow, TableCell,
+          WidthType, AlignmentType, BorderStyle, Packer } = window.docx;
+
+  const bp = (txt, sz=24, bold=false, align=AlignmentType.LEFT) =>
+    new Paragraph({ children: [new TextRun({ text: safe(txt), size: sz, bold })], alignment: align, spacing: { after: 100 } });
+  const h1 = t => bp(t, 48, true, AlignmentType.CENTER);
+  const h2 = t => bp(t, 32, true);
+  const p  = t => bp(t, 24);
+  const br = () => new Paragraph({ children: [new TextRun('')], spacing: { after: 80 } });
+
+  const dr = d.dateRange;
+  const dateStr = dr.start ? `${safe(dr.start)} 至 ${safe(dr.end)}，共 ${dr.totalDays} 日` : '____年____月____日 至 ____年____月____日';
+  const spons = selSponsors(d);
+  const sDesc = spons.length ? spons.map(s=>`${safe(s.type)}：${safe(s.description)} ${safe(s.amount)}`).join('；') : '依附件贊助方案';
+  const noBdr = { top:{style:BorderStyle.NONE}, bottom:{style:BorderStyle.NONE}, left:{style:BorderStyle.NONE}, right:{style:BorderStyle.NONE}, insideH:{style:BorderStyle.NONE}, insideV:{style:BorderStyle.NONE} };
+
+  const sigTbl = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBdr,
+    rows: [new TableRow({ children: [
+      new TableCell({ width:{size:50,type:WidthType.PERCENTAGE}, children: [p('甲方：Molecular Devices (Hong Kong) Limited'), p('簽字：___________________________'), p('日期：____年____月____日')] }),
+      new TableCell({ width:{size:50,type:WidthType.PERCENTAGE}, children: [p(`乙方：${safe(d.mainOrganizer)}`), p('簽字：___________________________'), p('日期：____年____月____日')] })
+    ]})]
+  });
+
+  const doc = new Document({ sections: [{ children: [
+    h1('贊助合約'), br(),
+    p(`甲方：Molecular Devices (Hong Kong) Limited（以下簡稱「甲方」）`),
+    p(`乙方：${safe(d.mainOrganizer)}（以下簡稱「乙方」）`),
+    br(),
+    p('雙方本著平等自願、互惠互利的原則，就贊助相關事宜，訂立本協議如下：'),
+    br(),
+    h2('第一條  會議及費用'),
+    p(`一、會議名稱：${safe(d.eventName)}`),
+    p(`二、會議時間：${dateStr}`),
+    p(`三、會議地點：${safe(d.venue?.full||'待確認')}`),
+    p(`四、贊助方案：${sDesc}`),
+    p('五、付款方式：乙方開具發票後 10 個工作日內，甲方以匯款方式支付。'),
+    p(`六、付款截止日：${safe(d.paymentDeadline||'依乙方通知')}`),
+    p(d.bankAccount?.zh ? `七、收款資訊：${safe(d.bankAccount.zh)}` : '七、收款資訊：詳見乙方提供之匯款資訊。'),
+    br(),
+    h2('第二條  雙方的權利義務'),
+    p('甲方及乙方之具體權利與義務，依附件「贊助申請表」所載明之贊助項目及內容為準。乙方應確保甲方所選定之贊助項目得以完整履行。'),
+    br(),
+    h2('第三條  違約責任'),
+    p('雙方均應嚴格履行本協議所規定的責任和義務。任何一方若未能履行本協議中的有關規定，違約方應承擔因此給守約方造成的一切經濟損失。'),
+    br(),
+    h2('第四條  協議的變更及解除'),
+    p('本協議的任何修改均須以書面形式提出，並由雙方授權代表共同簽署方可生效。若任何一方違反本協議的規定，且在收到對方書面通知後 10 個工作日內仍未予糾正的，另一方有權解除本協議，並要求違約方賠償因此造成的全部損失。'),
+    br(),
+    h2('第五條  爭議解決'),
+    p('本協議受中華民國法律管轄。因本協議引起的或與本協議有關的任何爭議，均提交中華民國仲裁協會在台北市進行仲裁，仲裁結果對雙方均有約束力。'),
+    br(),
+    h2('第六條  合同生效'),
+    p('本合同一式兩份，雙方各執一份，經雙方授權代表簽字蓋章後即刻生效，直至雙方義務全部履行完畢為止。'),
+    br(), br(), sigTbl
+  ]}]});
+
+  dl(await Packer.toBlob(doc), fname('contract', d) + '.docx');
+}
+
+async function genLegal(d) {
+  if (!window.docx) throw new Error('docx 套件未載入，請重新整理頁面');
+  const { Document, Paragraph, TextRun, Table, TableRow, TableCell,
+          WidthType, AlignmentType, BorderStyle, Packer } = window.docx;
+
+  const SNG = { style: BorderStyle.SINGLE, size: 1 };
+  const bdr = { top:SNG, bottom:SNG, left:SNG, right:SNG, insideH:SNG, insideV:SNG };
+
+  const mkRow = (zh, en, val) => new TableRow({ children: [
+    new TableCell({
+      width:{size:32,type:WidthType.PERCENTAGE},
+      shading:{fill:'F2F2F2'},
+      children: [new Paragraph({ children: [
+        new TextRun({text:safe(zh),bold:true,size:20}),
+        new TextRun({break:1}),
+        new TextRun({text:safe(en),size:17,color:'777777'})
+      ], spacing:{after:60} })]
+    }),
+    new TableCell({
+      width:{size:68,type:WidthType.PERCENTAGE},
+      children: [new Paragraph({ children: [new TextRun({text:safe(val),size:20})], spacing:{after:60} })]
+    })
+  ]});
+
+  const chkRow = (lbl, chk) => new TableRow({ children: [
+    new TableCell({ columnSpan:2, children: [new Paragraph({ children: [new TextRun({text:(chk?'☑ ':'☐ ')+safe(lbl),size:20})], spacing:{after:40} })] })
+  ]});
+
+  const tbl = rows => new Table({ width:{size:100,type:WidthType.PERCENTAGE}, borders:bdr, rows });
+  const h = (t,sz=26) => new Paragraph({ children:[new TextRun({text:safe(t),bold:true,size:sz})], spacing:{before:200,after:100} });
+  const br = () => new Paragraph({ children:[new TextRun('')], spacing:{after:80} });
+
+  const dr = d.dateRange;
+  const dtStr = dr.start ? `${dr.start} - ${dr.end}` : '';
+  const spons = selSponsors(d);
+  const totalAmt = spons.map(s=>s.amount).filter(Boolean).join(' / ');
+  const sBenefits = spons.map(s=>`${s.type}：${s.description}`).join('\n');
+
+  const doc = new Document({ sections: [{ children: [
+    new Paragraph({ children:[new TextRun({text:'Products Promotion through Third Party Conferences Request Form',bold:true,size:32})], alignment:AlignmentType.CENTER, spacing:{after:60} }),
+    new Paragraph({ children:[new TextRun({text:'第三方會議贊助申請表',bold:true,size:28})], alignment:AlignmentType.CENTER, spacing:{after:200} }),
+
+    h('A. 活動基本資訊 / Conference Details'),
+    tbl([
+      mkRow('活動名稱','Conference Name', d.eventName),
+      mkRow('活動日期','Date', dtStr),
+      mkRow('主辦單位','Organizing Unit', d.mainOrganizer),
+      mkRow('申請人','Applicant', 'Pluck Chou'),
+      mkRow('活動主題','Conference Topic', (d.keyTopics?.keywords||[]).join(', ') || d.keyTopics?.summary||''),
+    ]),
+    br(),
+    h('B. 費用資訊 / Payment & Cost'),
+    tbl([
+      mkRow('贊助金額','Promotion Payment', totalAmt),
+      mkRow('收款單位','Payment Recipient', d.payee),
+      mkRow('開立發票','Receipt Issuer', d.mainOrganizer),
+      mkRow('付款截止','Payment Deadline', d.paymentDeadline),
+    ]),
+    br(),
+    h('C. 效益說明 / Benefits & Consideration'),
+    tbl([
+      mkRow('預計參與人數','Expected Participants', d.attendeeCount),
+      mkRow('贊助效益','Sponsorship Benefits', sBenefits),
+      mkRow('策略適配性','Strategic Fit (AI)', d.aiTips?.fitAnalysis||''),
+      mkRow('建議展示產品','Recommended Products', (d.aiTips?.recommendedProducts||[]).join(', ')),
+    ]),
+    br(),
+    h('D. 文件清單 / Related Documentation'),
+    tbl([
+      chkRow('會議通知 / Conference Notice', true),
+      chkRow('贊助協議 / Sponsorship Agreement', false),
+      chkRow('會議議程 / Conference Schedule', false),
+      chkRow('參加者名單 / Participant List', false),
+      chkRow('客戶行程安排 / Customer Trip Involvement', false),
+    ]),
+    br(),
+    h('E. 審批欄 / Approval Section'),
+    tbl([
+      mkRow('業務主管','Business Director', 'Woolen Pan'),
+      mkRow('法務審核','Legal Approval', 'Qiyi Wu / Echo Ding'),
+      mkRow('總經理','GM Approval', ''),
+      mkRow('財務審核','Finance Review', 'Can Huang（超過金額上限呈報 MD President）'),
+    ]),
+    br(),
+    h('F. 公司政策聲明 / Policy Statement', 22),
+    new Paragraph({ children:[new TextRun({text:'Molecular Devices promotes its products through bona fide marketing opportunities at third-party conferences. All sponsorship payments must be reasonable, documented, and in compliance with company anti-bribery policies. This form shall not be used to gain improper business advantage. No door prizes or personal gifts shall be provided.',size:19,color:'555555'})], spacing:{after:80} }),
+  ]}}]);
+
+  dl(await Packer.toBlob(doc), fname('legal_form', d) + '.docx');
+}
+
+function genBudget(d) {
+  const spons = selSponsors(d);
+  const sLines = spons.length ? spons.map(s=>`- **${s.type}**：${s.description}${s.amount?' （'+s.amount+'）':''}`).join('\n') : '- 贊助方案詳見附件';
+  const totalAmt = spons.map(s=>s.amount).filter(Boolean).join(' / ') || '—';
+  const txt = `# 預算申請信草稿
+
+**致：** [主管姓名]
+**日期：** ${today()}
+**主旨：** 申請參加「${d.eventName||'—'}」贊助費用
+
+---
+
+## 一、活動概要
+
+- **活動名稱：** ${d.eventName||'—'}
+- **活動日期：** ${d.dateRange?.start||'—'} ～ ${d.dateRange?.end||'—'}（共 ${d.dateRange?.totalDays||'?'} 日，${d.dateRange?.dayOfWeek||''}）
+- **活動地點：** ${d.venue?.full||'—'}
+- **主辦單位：** ${d.mainOrganizer||'—'}
+- **活動來源：** ${AppState.eventSource||'—'}
+
+## 二、贊助方案說明
+
+${sLines}
+
+**總費用：** ${totalAmt}
+**付款截止日：** ${d.paymentDeadline||'—'}
+**收款帳號：** ${d.bankAccount?.zh||'—'}
+
+## 三、預算狀態
+
+- 是否已提列年度預算：**${AppState.isBudgeted?'是':'否（需額外申請）'}**
+
+## 四、策略效益
+
+${d.aiTips?.fitAnalysis||'—'}
+
+**建議推廣產品：** ${(d.aiTips?.recommendedProducts||[]).join('、')||'—'}
+**推薦應用方向：** ${(d.aiTips?.recommendedApplications||[]).join('、')||'—'}
+
+## 五、聯絡人資訊
+
+${(d.contactInfo||[]).map(c=>`- ${c.name}｜${c.phone}｜${c.email}`).join('\n')||'—'}
+
+---
+
+敬請核示。
+
+Pluck Chou
+Molecular Devices (Hong Kong) Limited
+TWHK Senior Marketing & BD Manager
+`;
+  dlTxt(txt, fname('budget_request', d) + '.md');
+}
+
+function genReply(d) {
+  const c = d.contactInfo?.[0] || {};
+  const spons = selSponsors(d);
+  const sLines = spons.length ? spons.map(s=>`- ${s.type}：${s.description}${s.amount?' （'+s.amount+'）':''}`).join('\n') : '- 贊助方案（待確認）';
+  const txt = `# 活動回覆/追蹤信草稿
+
+**致：** ${c.name||'[聯絡人姓名]'}
+**信箱：** ${c.email||'[聯絡人信箱]'}
+**日期：** ${today()}
+**主旨：** Re: ${d.eventName||'—'} 贊助合作邀請
+
+---
+
+${c.name?c.name+' 您好，':'您好，'}
+
+感謝 ${d.mainOrganizer||'貴單位'} 邀請 Molecular Devices (Hong Kong) Limited 參與「${d.eventName||'—'}」。
+
+## 確認事項
+
+- **活動日期：** ${d.dateRange?.start||'—'} ～ ${d.dateRange?.end||'—'}
+- **活動地點：** ${d.venue?.full||'—'}
+- **贊助方案：**
+${sLines}
+- **付款截止日：** ${d.paymentDeadline||'—'}
+
+## 待確認事項 / 追蹤清單
+
+- [ ] 贊助合約簽署
+- [ ] 付款匯款確認
+- [ ] 展位/展示材料繳交截止日
+- [ ] 參加人員名單確認
+- [ ] 演講/展示時段安排（如適用）
+- [ ] 其他補充文件
+
+## 備注
+
+${d.otherNotes||'無'}
+
+---
+
+如有任何問題，歡迎隨時聯繫。
+
+此致
+
+Pluck Chou
+Molecular Devices (Hong Kong) Limited
+TWHK Senior Marketing & BD Manager`;
+  dlTxt(txt, fname('reply_email', d) + '.md');
+}
+
+function genReport(d) {
+  const all = [...(d.sponsorOptions||[]).filter(o=>o.checked)];
+  const cust = document.getElementById('sp-custom')?.value||'';
+  if (cust.trim()) all.push({type:'客制化',description:cust,amount:''});
+  const e = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  document.getElementById('print-area').innerHTML = `
+    <h1>📋 活動摘要報告</h1>
+    <p style="color:#888;font-size:10pt">產生日期：${today()} ｜ Molecular Devices TWHK ｜ MKT Event Processor v1.0</p>
+    <hr style="border:1px solid #ddd;margin:10pt 0">
+    <h2>📌 活動基本資訊</h2>
+    <table>
+      <tr><th>欄位</th><th>內容</th></tr>
+      <tr><td>活動名稱</td><td>${e(d.eventName)||'—'}</td></tr>
+      <tr><td>時間</td><td>${e(d.dateRange?.start)||'—'} ～ ${e(d.dateRange?.end)||'—'}（共 ${d.dateRange?.totalDays||'?'} 日，${e(d.dateRange?.dayOfWeek)||''}）</td></tr>
+      <tr><td>主辦單位</td><td>${e(d.mainOrganizer)||'—'}</td></tr>
+      <tr><td>地點</td><td>${e(d.venue?.full)||'—'}</td></tr>
+      <tr><td>預計人數</td><td>${e(d.attendeeCount)||'—'}</td></tr>
+      <tr><td>活動網址</td><td>${e(d.eventUrl)||'—'}</td></tr>
+    </table>
+    <h2>💰 費用資訊</h2>
+    <table>
+      <tr><th>欄位</th><th>中文</th><th>English</th></tr>
+      <tr><td>費用收款人</td><td colspan="2">${e(d.payee)||'—'}</td></tr>
+      <tr><td>付款截止日</td><td colspan="2">${e(d.paymentDeadline)||'—'}</td></tr>
+      <tr><td>收款帳號</td><td>${e(d.bankAccount?.zh)||'—'}</td><td>${e(d.bankAccount?.en)||'—'}</td></tr>
+    </table>
+    <h2>🎯 贊助方案（已選）</h2>
+    ${all.length ? `<table><tr><th>類型</th><th>內容</th><th>金額</th></tr>${all.map(s=>`<tr><td>${e(s.type)}</td><td>${e(s.description)}</td><td>${e(s.amount)||'—'}</td></tr>`).join('')}</table>` : '<p>尚未選擇贊助方案</p>'}
+    <h2>📚 重點主題</h2>
+    <p>${e(d.keyTopics?.summary)||'—'}</p>
+    <p>${(d.keyTopics?.keywords||[]).map(k=>`<span class="ctag">${e(k)}</span>`).join(' ')||''}</p>
+    <h2>👥 重要人物</h2>
+    ${(d.vipList||[]).length ? `<table><tr><th>姓名</th><th>角色</th><th>單位</th></tr>${d.vipList.map(v=>`<tr><td>${e(v.name)}</td><td>${e(v.role)}</td><td>${e(v.affiliation)}</td></tr>`).join('')}</table>` : '<p>—</p>'}
+    <h2>📞 聯絡人</h2>
+    ${(d.contactInfo||[]).length ? `<table><tr><th>姓名</th><th>電話</th><th>信箱</th></tr>${d.contactInfo.map(c=>`<tr><td>${e(c.name)}</td><td>${e(c.phone)}</td><td>${e(c.email)}</td></tr>`).join('')}</table>` : '<p>—</p>'}
+    <h2>🤖 AI 助理建議</h2>
+    <p><b>策略適配性：</b>${e(d.aiTips?.fitAnalysis)||'—'}</p>
+    <p><b>建議展示產品：</b>${(d.aiTips?.recommendedProducts||[]).map(p=>`<span class="ctag">${e(p)}</span>`).join(' ')||'—'}</p>
+    <p><b>推薦應用方向：</b>${(d.aiTips?.recommendedApplications||[]).join('、')||'—'}</p>
+    ${d.otherNotes ? `<h2>📝 其他注意事項</h2><p>${e(d.otherNotes)}</p>` : ''}
+    <hr style="border:1px solid #ddd;margin:10pt 0">
+    <p style="color:#aaa;font-size:9pt">本報告由 MKT Event Processor v1.0 自動生成 | Molecular Devices TWHK | ${today()}</p>
+  `;
+  window.print();
+}
+
+// ---- Event Binder ----
+document.addEventListener('DOMContentLoaded', () => {
+  AppState.settings = SM.load();
+  document.getElementById('inp-key').value = AppState.settings.apiKey;
+  document.getElementById('inp-url').value = AppState.settings.baseUrl;
+  document.getElementById('sel-model').value = AppState.settings.model;
+
+  // File upload
+  const drop = document.getElementById('drop');
+  const fi = document.getElementById('finput');
+  const fl = document.getElementById('flist');
+  const updFiles = files => {
+    AppState.files = Array.from(files);
+    fl.innerHTML = AppState.files.map(f=>`<span class="fchip">${f.name}</span>`).join('');
+  };
+  drop.addEventListener('click', () => fi.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); if(e.dataTransfer.files.length) updFiles(e.dataTransfer.files); });
+  fi.addEventListener('change', e => updFiles(e.target.files));
+
+  // Options
+  document.getElementById('chk-budget').addEventListener('change', e => { AppState.isBudgeted = e.target.checked; });
+  document.getElementById('sel-src').addEventListener('change', e => { AppState.eventSource = e.target.value; });
+  document.getElementById('txt-extra').addEventListener('input', e => { AppState.extraPrompt = e.target.value; });
+
+  // Analyze
+  document.getElementById('btn-analyze').addEventListener('click', async () => {
+    try {
+      loading('正在讀取文件...');
+      let txt = '';
+      if (AppState.files.length) {
+        txt = await FH.readAll(AppState.files);
+        if (txt.length < 100) st('文件內容提取有限，建議將邀請函文字貼入④額外提示欄。', 'wrn');
+      }
+      if (!txt.trim() && !AppState.extraPrompt.trim()) {
+        loaded(); st('請先上傳邀請函，或在④額外提示區貼入活動資訊', 'err'); return;
+      }
+      AppState.extractedText = txt;
+      document.getElementById('lstat').textContent = '正在呼叫 AI 分析...';
+      const raw = await API.analyze(txt, AppState.extraPrompt, AppState.settings);
+      AppState.data = DP.parse(raw);
+      UI.render(AppState.data);
+      loaded(); st('分析完成！請確認右側摘要，如需修正請使用④額外提示區。', 'ok');
+    } catch(e) { loaded(); st('錯誤：' + e.message, 'err'); }
+  });
+
+  // Output buttons
+  const guard = () => { if (!AppState.data.eventName) { st('請先完成分析', 'wrn'); return false; } return true; };
+
+  document.getElementById('btn-all').addEventListener('click', async () => {
+    if (!guard()) return;
+    try {
+      loading('生成所有文件中...');
+      await genContract(AppState.data);
+      await genLegal(AppState.data);
+      genBudget(AppState.data);
+      genReply(AppState.data);
+      loaded(); st('4 份文件已下載！最後請點擊「活動摘要報告」列印 PDF。', 'ok');
+    } catch(e) { loaded(); st('生成錯誤：' + e.message, 'err'); }
+  });
+
+  document.getElementById('btn-contract').addEventListener('click', async () => {
+    if (!guard()) return;
+    try { await genContract(AppState.data); st('活動協議草稿 .docx 已下載', 'ok'); }
+    catch(e) { st('錯誤：'+e.message, 'err'); }
+  });
+  document.getElementById('btn-legal').addEventListener('click', async () => {
+    if (!guard()) return;
+    try { await genLegal(AppState.data); st('法務審批表格 .docx 已下載', 'ok'); }
+    catch(e) { st('錯誤：'+e.message, 'err'); }
+  });
+  document.getElementById('btn-budget').addEventListener('click', () => {
+    if (!guard()) return; genBudget(AppState.data); st('預算申請信草稿 .md 已下載', 'ok');
+  });
+  document.getElementById('btn-reply').addEventListener('click', () => {
+    if (!guard()) return; genReply(AppState.data); st('回覆/追蹤信草稿 .md 已下載', 'ok');
+  });
+  document.getElementById('btn-report').addEventListener('click', () => {
+    if (!guard()) return; genReport(AppState.data);
+  });
+
+  // Modals
+  document.getElementById('btn-help').addEventListener('click', () => document.getElementById('mhelp').classList.add('on'));
+  document.getElementById('btn-settings').addEventListener('click', () => document.getElementById('mset').classList.add('on'));
+  document.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => document.getElementById(b.dataset.c).classList.remove('on')));
+  document.querySelectorAll('.ov').forEach(ov => ov.addEventListener('click', e => { if (e.target===ov && ov.id!=='mload') ov.classList.remove('on'); }));
+
+  // Settings
+  document.getElementById('btn-saveset').addEventListener('click', () => {
+    const s = {
+      apiKey: document.getElementById('inp-key').value.trim(),
+      baseUrl: document.getElementById('inp-url').value.trim() || 'https://api.anthropic.com',
+      model: document.getElementById('sel-model').value
+    };
+    SM.save(s); AppState.settings = s;
+    document.getElementById('mset').classList.remove('on');
+    st('設定已儲存', 'ok');
+  });
+  document.getElementById('btn-showkey').addEventListener('click', () => {
+    const inp = document.getElementById('inp-key'), btn = document.getElementById('btn-showkey');
+    inp.type = inp.type==='password' ? 'text' : 'password';
+    btn.textContent = inp.type==='password' ? 'show' : 'hide';
+  });
+});
+</script>
+</body>
+</html>
